@@ -414,9 +414,9 @@ class YOLOV3Head(BaseDenseHead):
         target_label = target_map[..., 5:]
 
         loss_cls = self.loss_cls(pred_label, target_label, weight=pos_mask)
-        print("\n original loss_cls: ", loss_cls)
+        # print("\n original loss_cls: ", loss_cls)
         loss_cls = self.cw_loss(pred_label, target_label, pos_mask=pos_mask)
-        print("cw loss_cls: ", loss_cls)
+        # print("cw loss_cls: ", loss_cls)
         loss_conf = self.loss_conf(
             pred_conf, target_conf, weight=pos_and_neg_mask)
         loss_xy = self.loss_xy(pred_xy, target_xy, weight=pos_mask)

@@ -248,6 +248,35 @@ class DETRHead(BaseModule):
             num_dec_layer += 1
         return loss_dict
 
+    
+    def cw_loss(self, cls_score, labels, label_weights):
+        """
+            最大logits-第二大logits
+        """
+        # 计算最大值损失
+        max_vals, max_indices = torch.max(cls_score, dim=-1)
+        max_vals_expanded = max_vals.unsqueeze(-1)
+        one_hot_max = torch.zeros_like(cls_score).scatter_(-1, max_indices.unsqueeze(-1), 1)
+        max_pred_scores = max_vals_expanded * one_hot_max
+        # 最大值对应原始标签的损失
+        max_loss = self.loss_cls(max_pred_scores, labels, label_weights)
+        
+        # 计算第二大值损失
+        pred_label_minus_max, _ = torch.max((cls_score - max_vals_expanded).clamp(min=0), dim=-1)
+        second_max_indices = pred_label_minus_max.nonzero()[:, -1]
+        one_hot_second_max = torch.zeros_like(cls_score).scatter_(-1, second_max_indices.unsqueeze(-1), 1)
+        second_max_pred_scores = (pred_label_minus_max.unsqueeze(-1) * one_hot_second_max)
+
+        # 使用second_max_pred_scores计算第二大值损失
+        second_max_loss = self.loss_cls(second_max_pred_scores, labels, label_weights)
+        
+        # 计算损失差
+        loss = torch.abs(max_loss - second_max_loss)
+        # loss = max_loss - second_max_loss
+
+        return loss
+    
+    
     def loss_by_feat_single(self, cls_scores: Tensor, bbox_preds: Tensor,
                             batch_gt_instances: InstanceList,
                             batch_img_metas: List[dict]) -> Tuple[Tensor]:
@@ -312,7 +341,10 @@ class DETRHead(BaseModule):
         else:
             loss_cls = self.loss_cls(
                 cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
-
+        # print("\n ori loss_cls: ", loss_cls)
+        # 使用 CW loss 替换原有损失计算
+        loss_cls = self.cw_loss(cls_scores, labels, label_weights).mean()
+        # print("cw loss : ", loss_cls)
         # Compute the average number of gt boxes across all gpus, for
         # normalization purposes
         num_total_pos = loss_cls.new_tensor([num_total_pos])
